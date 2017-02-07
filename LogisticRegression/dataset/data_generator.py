@@ -11,8 +11,8 @@ n_instances_per_sample = 100
 def sample(n_instances):
   data_list = []
 
-  mean = np.random.uniform(-10, 10, size=n_dim)
-  cov = np.diagflat(np.random.uniform(0.5, 1, size=n_dim))
+  mean = np.random.uniform(-2, 2, size=n_dim)
+  cov = np.diagflat(np.random.uniform(0.8, 1, size=n_dim))
   #print mean, cov
 
   data_list = np.random.multivariate_normal(mean, cov, n_instances)
