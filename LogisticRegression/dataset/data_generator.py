@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 # config
-n_dim = 10
+n_dim = 3
 n_train_samples = 90
 n_test_samples = 100
 n_instances_per_sample = 100
@@ -11,7 +11,7 @@ n_instances_per_sample = 100
 def sample(n_instances):
   data_list = []
 
-  mean = np.random.uniform(-2, 2, size=n_dim)
+  mean = np.random.uniform(-1, 1, size=n_dim)
   cov = np.diagflat(np.random.uniform(0.8, 1, size=n_dim))
   #print mean, cov
 

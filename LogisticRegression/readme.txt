@@ -1,0 +1,1 @@
+Since Logistic Regression is a simple linear classifier. The loss function is convex. This two factors render it hard to find the difference between different optimization scheme. Better start with MNIST and then add this for completeness.
