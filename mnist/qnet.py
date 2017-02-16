@@ -1,13 +1,13 @@
 import numpy as np
 import tensorflow as tf
 import random
-import argparse
 from collections import deque
+
+# len_episode: 550
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('num_actions', 2, 'number of actions')
 tf.app.flags.DEFINE_integer('num_episodes', 100, 'number of episodes')
-tf.app.flags.DEFINE_integer('len_episodes', 550, 'length of an episode')
 tf.app.flags.DEFINE_integer('batch_size', 32, '')
 tf.app.flags.DEFINE_integer('observ_dim', 35, 'dimension of state')
 tf.app.flags.DEFINE_integer('state_num', 4, 'number of observ are stacked in a state')
@@ -16,13 +16,11 @@ tf.app.flags.DEFINE_float('start_e', 1.0, 'chance of random action at the beginn
 tf.app.flags.DEFINE_float('end_e', 0.1, 'chance of random action at the end')
 tf.app.flags.DEFINE_float('lr', 1e-3, 'learning rate')
 tf.app.flags.DEFINE_boolean('isTraining', True, 'is training?')
-
-# uncertain
 tf.app.flags.DEFINE_integer('explore', 2*50*550, 'observe before training') # 2 episode
 tf.app.flags.DEFINE_integer('observe', 1*50*550, 'observe before training') # 1 episode
 tf.app.flags.DEFINE_float('tau', 1e-3, 'rate to update target network towards primary network')
-tf.app.flags.DEFINE_integer('memory_size', 30000, 'replay memory size') # TODO: set according to sample frequency
-tf.app.flags.DEFINE_float('training_freq', 2, 'How ofen to perform a trianing step')
+tf.app.flags.DEFINE_integer('memory_size', 2000, 'replay memory size') # more than
+tf.app.flags.DEFINE_integer('memory_sample_freq', 50, 'How often to add a memory') # 11 tuples/epoch, 550 tuples/episode
 
 def linear(input_, output_size, stddev=0.02, bias_start=0.0, activation_fn=None, name='linear'):
   shape = input_.get_shape().as_list()
@@ -41,15 +39,27 @@ class memory_buffer(object):
   def __init__(self, buffer_size):
     self.size = buffer_size
     # mem_buffer: (s, a, r, s1, t)
-    self.mem_buffer = deque()
-  def add(self, experience):
-    self.mem_buffer.append(experience)
+    self.mem_buffer = [[], [], [], [], []]
+    self.prob = []
+  def add(self, experience, priority):
+    for i in xrange(5):
+      self.mem_buffer[i].append(experience[i])
+    self.prob.append(priority)
     if len(self.mem_buffer) > self.size:
-      self.mem_buffer.popleft()
+      for i in xrange(5):
+        self.mem_buffer[i][0:1] = []
+      self.prob[0:1] = []
   def sample(self, batch_size):
-    return random.sample(self.mem_buffer, batch_size)
+    prob = np.asarray(self.prob, dtype=float)
+    prob = prob / prob.sum()
+    inds = np.random.choice(len(self.mem_buffer[0]), batch_size, p=prob, replace=False)
+    return np.asarray(self.mem_buffer[0])[inds], \
+           np.asarray(self.mem_buffer[1])[inds], \
+           np.asarray(self.mem_buffer[2])[inds], \
+           np.asarray(self.mem_buffer[3])[inds], \
+           np.asarray(self.mem_buffer[4])[inds]
 
-class Qnetwork(object):
+class qnet(object):
   def __init__(self):
     self.memory = memory_buffer(FLAGS.memory_size)
     self.step = 0
@@ -113,14 +123,26 @@ class Qnetwork(object):
     for i in xrange(FLAGS.state_num):
       obvs.append(observation)
     self.cur_state = np.hstack(obvs)
-    assert (self.cur_state.ndim == 2), "Invalid initial state"
+    assert (self.cur_state.ndim == 1), "Invalid initial state"
 
   def set_perception(self, action, reward, next_observ, terminal):
-    assert (next_observ.ndim == 2), "Invalid next observation 2 vs. {}".format(next_observ.ndim)
+    assert (next_observ.ndim == 1), "Invalid next observation 2 vs. {}".format(next_observ.ndim)
 
     ### 1. update memory
-    next_state = np.append(self.cur_state[:, FLAGS.observ_dim:], next_observ, axis=1)
-    self.memory.add((self.cur_state, action, reward, next_state, terminal))
+    next_state = np.append(self.cur_state[FLAGS.observ_dim:], next_observ, axis=0)
+    if self.step % FLAGS.memory_sample_freq == 0:
+      # compute loss
+      a_p = self.session.run([self.action_pred], \
+              feed_dict={self.state_input: next_state[np.newaxis, :]})[0][0]
+      q_pt = self.session.run([self.Q_t], \
+              feed_dict={self.state_input_t: next_state[np.newaxis, :]})[0][0]
+      nx_q = q_pt[a_p]
+      q_gt = reward + FLAGS.gamma * nx_q * (1-terminal)
+      priority = self.session.run([self.cost], feed_dict={self.state_input: self.cur_state[np.newaxis, :],
+                                                            self.action: action[np.newaxis, :],
+                                                            self.Q_gt: np.asarray([q_gt])})[0]
+      # clip if priority > 1
+      self.memory.add((self.cur_state, action, reward, next_state, terminal), priority if priority < 1 else 1)
 
     ### 2. train
     if self.step > FLAGS.observe and FLAGS.isTraining:
@@ -144,17 +166,8 @@ class Qnetwork(object):
 
   def train(self):
     ### 1. obtain training batch from memory
-    minibatch = self.memory.sample(self.batch_size)
-    state_batch = np.vstack([data[0] for data in minibatch])
-    action_batch = np.stack([data[1] for data in minibatch])
-    reward_batch = np.stack([data[2] for data in minibatch])
-    nx_state_batch = np.vstack([data[3] for data in minibatch])
-    terminal = np.stack([data[4] for data in minibatch])
-    # print state_batch.shape
-    # print action_batch.shape
-    # print reward_batch.shape
-    # print nx_state_batch.shape
-    # print terminal.shape
+    state_batch, action_batch, reward_batch, nx_state_batch, terminal \
+            = self.memory.sample(self.batch_size)
     assert (state_batch.ndim == 2 and action_batch.ndim == 2 and \
             reward_batch.ndim == 1 and nx_state_batch.ndim == 2 and \
             terminal.ndim == 1), "Invalid training input"
@@ -175,7 +188,7 @@ class Qnetwork(object):
 
   def get_action(self):
     action_pred = self.session.run([self.action_pred], \
-            feed_dict={self.state_input: self.cur_state})[0]
+            feed_dict={self.state_input: self.cur_state[np.newaxis, :]})[0]
     action = np.zeros(FLAGS.num_actions)
     action_ind = action_pred if random.random() > self.epsilon \
                              else random.randrange(FLAGS.num_actions)
