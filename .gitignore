@@ -1,2 +1,3 @@
 LogisticRegression/dataset/train/*
 LogisticRegression/dataset/test/*
+mnist/res/env_fig/*

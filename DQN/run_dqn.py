@@ -48,8 +48,7 @@ class Qnetwork():
 
         self.td_error = tf.square(self.targetQ - self.Q)
         self.loss = tf.reduce_mean(self.td_error)
-        self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
-        self.updateModel = self.trainer.minimize(self.loss)
+        self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001) self.updateModel = self.trainer.minimize(self.loss)
 
 class experience_buffer():
     def __init__(self, buffer_size = 50000):
