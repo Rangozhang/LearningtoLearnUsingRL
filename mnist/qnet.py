@@ -41,7 +41,7 @@ class memory_buffer(object):
     # mem_buffer: (s, a, r, s1, t)
     self.mem_buffer = [[], [], [], [], []]
     self.prob = []
-  def add(self, experience, priority):
+  def add(self, experience, priority=1):
     for i in xrange(5):
       self.mem_buffer[i].append(experience[i])
     self.prob.append(priority)
@@ -53,11 +53,7 @@ class memory_buffer(object):
     prob = np.asarray(self.prob, dtype=float)
     prob = prob / prob.sum()
     inds = np.random.choice(len(self.mem_buffer[0]), batch_size, p=prob, replace=False)
-    return np.asarray(self.mem_buffer[0])[inds], \
-           np.asarray(self.mem_buffer[1])[inds], \
-           np.asarray(self.mem_buffer[2])[inds], \
-           np.asarray(self.mem_buffer[3])[inds], \
-           np.asarray(self.mem_buffer[4])[inds]
+    return [np.asarray(buffer_)[inds] for buffer_ in self.mem_buffer]
 
 class qnet(object):
   def __init__(self):
@@ -81,8 +77,8 @@ class qnet(object):
     self.create_train_op()
 
     config_proto = tf.ConfigProto(log_device_placement=False)
-    # config_proto.gpu_options.per_process_gpu_memory_fraction = 0.4
-    config_proto.gpu_options.allow_growth = True
+    config_proto.gpu_options.per_process_gpu_memory_fraction = 0.4
+    # config_proto.gpu_options.allow_growth = True
     # config_proto.gpu_options.visible_device_list = '1'
     self.session = tf.Session(config=config_proto)
     self.session.run(tf.global_variables_initializer())
@@ -90,13 +86,13 @@ class qnet(object):
   def create_model(self):
     W = {}
     state_input = tf.placeholder('float32', [None, FLAGS.observ_dim*FLAGS.state_num])
-    l1, W['l1_w'], W['l1_b'] = linear(state_input, 1024, \
+    l1, W['l1_w'], W['l1_b'] = linear(state_input, 256, \
             activation_fn=tf.nn.relu, name='l1')
-    l2, W['l2_w'], W['l2_b'] = linear(l1, 512, \
+    l2, W['l2_w'], W['l2_b'] = linear(l1, 256, \
             activation_fn=tf.nn.relu, name='l2')
-    v_hid, W['v_hid_w'], W['v_hid_b'] = linear(l2, 256, \
+    v_hid, W['v_hid_w'], W['v_hid_b'] = linear(l2, 128, \
             activation_fn=tf.nn.relu, name='v_hid')
-    adv_hid, W['adv_hid_w'], W['adv_hid_b'] = linear(l2, 256, \
+    adv_hid, W['adv_hid_w'], W['adv_hid_b'] = linear(l2, 128, \
             activation_fn=tf.nn.relu, name='adv_hid')
     v, W['v_w'], W['v_b'] = linear(v_hid, 1, name='v')
     adv, W['adv_w'], W['adv_b'] = linear(adv_hid, FLAGS.num_actions, name='adv')
@@ -132,17 +128,18 @@ class qnet(object):
     next_state = np.append(self.cur_state[FLAGS.observ_dim:], next_observ, axis=0)
     if self.step % FLAGS.memory_sample_freq == 0:
       # compute loss
-      a_p = self.session.run([self.action_pred], \
-              feed_dict={self.state_input: next_state[np.newaxis, :]})[0][0]
-      q_pt = self.session.run([self.Q_t], \
-              feed_dict={self.state_input_t: next_state[np.newaxis, :]})[0][0]
-      nx_q = q_pt[a_p]
-      q_gt = reward + FLAGS.gamma * nx_q * (1-terminal)
-      priority = self.session.run([self.cost], feed_dict={self.state_input: self.cur_state[np.newaxis, :],
-                                                            self.action: action[np.newaxis, :],
-                                                            self.Q_gt: np.asarray([q_gt])})[0]
+      # a_p = self.session.run([self.action_pred], \
+      #         feed_dict={self.state_input: next_state[np.newaxis, :]})[0][0]
+      # q_pt = self.session.run([self.Q_t], \
+      #         feed_dict={self.state_input_t: next_state[np.newaxis, :]})[0][0]
+      # nx_q = q_pt[a_p]
+      # q_gt = reward + FLAGS.gamma * nx_q * (1-terminal)
+      # priority = self.session.run([self.cost], feed_dict={self.state_input: self.cur_state[np.newaxis, :],
+      #                                                       self.action: action[np.newaxis, :],
+      #                                                       self.Q_gt: np.asarray([q_gt])})[0]
       # clip if priority > 1
-      self.memory.add((self.cur_state, action, reward, next_state, terminal), priority if priority < 1 else 1)
+      # self.memory.add((self.cur_state, action, reward, next_state, terminal), priority if priority < 1 else 1)
+      self.memory.add((self.cur_state, action, reward, next_state, terminal))
 
     ### 2. train
     if self.step > FLAGS.observe and FLAGS.isTraining:

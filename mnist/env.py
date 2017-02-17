@@ -57,14 +57,10 @@ class SoftmaxRegression(object):
 
     # self.var_grad = tf.gradients(self.cost, [self.W, self.b])
 
-    self.cost_holder = tf.placeholder(tf.float32)
-    tf.summary.scalar('cost', self.cost_holder)
-    self.summary = tf.summary.merge_all()
-
     self.dataloader = input_data.read_data_sets("/home/users/yu01.zhang/dataset/MNIST_data", one_hot=True)
     config_proto = tf.ConfigProto(log_device_placement=False)
-    # config_proto.gpu_options.per_process_gpu_memory_fraction = 0.2
-    config_proto.gpu_options.allow_growth = True
+    config_proto.gpu_options.per_process_gpu_memory_fraction = 0.2
+    # config_proto.gpu_options.allow_growth = True
     # config_proto.gpu_options.visible_device_list = '3'
     self.session = tf.Session(config=config_proto)
     self.session.run(tf.global_variables_initializer())
@@ -79,10 +75,18 @@ class SoftmaxRegression(object):
   def step(self, action):
     # define action
     action = np.argmax(action)
-    if action == 0: # decrease 1%
-      self.adaptive_lr *= 0.97
+
+    if action == 0: # decrease 3%
+      self.adaptive_lr *= 0.50
     elif action == 1: # reset
       self.adaptive_lr = self.config['learning_rate']
+
+    # if action == 0: # decrease 1%
+    #   self.adaptive_lr *= 0.99
+    # elif action == 1: # keep
+    #   self.adaptive_lr = self.adaptive_lr
+    # elif action == 2: # increase 1%
+    #   self.adaptive_lr *= 1.0101
 
     train_x, train_y = self.dataloader.train.next_batch(self.config['batch_size'])
 
@@ -119,7 +123,7 @@ class SoftmaxRegression(object):
 
     ############## 2. terminal ##############
     self.n_step += 1
-    if self.n_step >= self.config['n_epochs'] * self.config['n_batches']:
+    if self.n_step >= self.config['n_epochs'] * self.config['n_batches'] or self.adaptive_lr < 1e-6:
       terminal = True
       self.n_step = 0
     else:
@@ -156,7 +160,13 @@ class SoftmaxRegression(object):
   def get_n_step(self):
     return self.n_step
 
+
 if __name__ == "__main__":
+
+  cost_holder = tf.placeholder(tf.float32)
+  tf.summary.scalar('cost', cost_holder)
+  merged = tf.summary.merge_all()
+
   config = {
   'n_training_samples' : 55000,
   'learning_rate' : 8e-1,
@@ -208,8 +218,8 @@ if __name__ == "__main__":
               "avg_cost=", "{:.9f}".format(avg_cost), "lr=", "{:.5f}".format(lr.print_lr()), \
               "avg_grad=", "({:.5f},{:.5f})".format(avg_max_grad, avg_min_grad), \
               "avg_r={:.5f}".format(avg_reward)
-      summary = lr.session.run([lr.summary], feed_dict={lr.cost_holder: avg_cost})[0]
-      writer.add_summary(summary, epoch)
+      res_merged = lr.session.run([merged], feed_dict={cost_holder: avg_cost})[0]
+      writer.add_summary(res_merged, epoch)
 
       avg_cost, avg_max_grad, avg_min_grad, avg_reward = 0, 0, 0, 0
       epoch += 1

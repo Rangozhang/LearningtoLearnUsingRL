@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import qnet
-import sys
+import sys, time
 from env import SoftmaxRegression as SR
 
 def play(argv):
@@ -18,18 +18,35 @@ def play(argv):
   env = SR(env_config)
   agent = qnet.qnet()
 
+  datetime = int(time.time())
+  loss_holder = tf.placeholder(tf.float32)
+  lr_holder = tf.placeholder(tf.float32)
+  avg_lr_holder = tf.placeholder(tf.float32)
+  loss_summary = tf.summary.scalar('loss', loss_holder)
+  avg_lr_summary = tf.summary.scalar('avg_lr', avg_lr_holder)
+  lr_summary = tf.summary.scalar('lr', lr_holder)
+  merged_epoch_summary = tf.summary.merge([loss_summary, avg_lr_summary])
+  merged_step_summary = tf.summary.merge([lr_summary])
+
   for ep in xrange(qnet.FLAGS.num_episodes):
     env.reset()
     action_1st = np.array([0, 1])
     _, _, state, _, _= env.step(action_1st)
     agent.init_state(state)
-    epoch, avg_cost, avg_max_grad, avg_min_grad, a0, terminal = 0, 0, 0, 0, 0, False
+
+    writer = tf.summary.FileWriter("./res/train_fig/{:10d}/ep{:d}".format(datetime, ep))
+
+    epoch, avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1, terminal = 0, 0, 0, 0, 0, 0, 0, False
     while not terminal:
       action = agent.get_action()
       if np.argmax(action) == 0:
-        a0 += 1.0
+        a0 += 1.0 / env_config['n_batches']
+      elif np.argmax(action) == 1:
+        a1 += 1.0 / env_config['n_batches']
+
       c, grads, nxt_state, reward, terminal = env.step(action)
 
+      avg_lr += env.print_lr() / env_config['n_batches']
       avg_cost += c / env_config['n_batches']
       grads_val_max = np.asarray([grad.max() for grad in grads]).max()
       grads_val_min = np.asarray([grad.min() for grad in grads]).min()
@@ -38,19 +55,26 @@ def play(argv):
 
       state_str = agent.set_perception(action, reward, nxt_state, terminal)
       batch_ind = env.get_n_step() - 1
+
       if batch_ind % env_config['display_step'] == 0:
         print '  [%02d/%02d/%03d]'%(ep+1, epoch+1, batch_ind), \
-              "cost={:.9f}".format(c), "lr={:.5f}".format(env.print_lr()), \
+              "cost={:.9f}".format(c), "lr={:.9f}".format(env.print_lr()), \
               "grad=({:.5f},{:.5f})".format(grads_val_max, grads_val_min), \
               "r={:.5f} t={:d}".format(reward, terminal), state_str
 
       if batch_ind % env_config['n_batches'] == env_config['n_batches'] - 1:
+        record_epoch_summary = env.session.run([merged_epoch_summary], feed_dict={loss_holder: avg_cost,
+                                                                                  avg_lr_holder: avg_lr})[0]
+        writer.add_summary(record_epoch_summary, epoch)
         print ' [%02d/%02d]'%(ep+1, epoch+1), \
-              "cost={:.9f}".format(avg_cost), "lr={:.5f}".format(env.print_lr()), \
+              "avg_cost={:.9f}".format(avg_cost), "avg_lr={:.9f}".format(avg_lr), \
               "avg_grad=({:.5f},{:.5f})".format(avg_max_grad, avg_min_grad), \
-              "action0_rate={:.5f}".format(a0/env_config['n_batches'])
-        avg_cost, avg_max_grad, avg_min_grad, a0 = 0, 0, 0, 0
+              "action_rate=[{:.5f}, {:.5f}, {:.5f}]".format(a0, a1, 1-a0-a1)
+        avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1 = 0, 0, 0, 0, 0, 0
         epoch += 1
+
+      record_step_summary = env.session.run([merged_step_summary], feed_dict={lr_holder: env.print_lr()})[0]
+      writer.add_summary(record_step_summary, batch_ind)
 
 if __name__ == "__main__":
   tf.app.run(play)

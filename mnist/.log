@@ -1,0 +1,5 @@
+1. reward
+    reward only for the absorbing state: averaged log difference. => accumulate the difference of reward for different actions
+
+2. action:
+    1/2 vs. reset -> for enlarge the difference of reward for different actions
