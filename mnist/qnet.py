@@ -143,7 +143,9 @@ class qnet(object):
 
     ### 2. train
     if self.step > FLAGS.observe and FLAGS.isTraining:
-      self.train()
+      cost = self.train()
+    else:
+      cost = 0
 
     ### 3. print info.
     state = ""
@@ -159,7 +161,7 @@ class qnet(object):
     ### 4. update training states
     self.cur_state = next_state
     self.step += 1
-    return state_str
+    return state_str, cost
 
   def train(self):
     ### 1. obtain training batch from memory
@@ -177,11 +179,12 @@ class qnet(object):
     terminal_multiplier = -(terminal-1)
     double_q = q_pred_t[range(FLAGS.batch_size), action_pred]
     Q_gt = reward_batch + FLAGS.gamma * double_q * terminal_multiplier
-    self.session.run([self.trainer], feed_dict={
+    c, _ = self.session.run([self.cost, self.trainer], feed_dict={
                         self.state_input: state_batch,
                         self.Q_gt: Q_gt,
                         self.action: action_batch})
     self.update_target_network()
+    return c
 
   def get_action(self):
     action_pred = self.session.run([self.action_pred], \

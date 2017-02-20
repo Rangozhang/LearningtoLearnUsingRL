@@ -43,12 +43,19 @@ def play(argv):
 
     writer = tf.summary.FileWriter("./res/train_fig/envlr{:.5f}_{:10d}/ep{:d}".format(env_config['learning_rate'], datetime, ep))
 
-    epoch, avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1, terminal = 0, 0, 0, 0, 0, 0, 0, False
+    avg_r0, avg_r1, epoch, avg_loss, avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1, terminal \
+                                                                                            = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, False
     r_list0, r_list1 = [], []
-    avg_r0, avg_r1 = 0, 0
     while not terminal:
+      # step 1
       action = agent.get_action()
+
+      # step 2
       c, grads, nxt_state, reward, terminal = env.step(action)
+
+      # step 3
+      state_str, loss = agent.set_perception(action, reward, nxt_state, terminal)
+
       if np.argmax(action) == 0:
         a0 += 1.0
         avg_r0 += reward
@@ -65,7 +72,7 @@ def play(argv):
       avg_max_grad += grads_val_max / env_config['n_batches']
       avg_min_grad += grads_val_min / env_config['n_batches']
 
-      state_str = agent.set_perception(action, reward, nxt_state, terminal)
+      avg_loss += loss / env_config['n_batches']
       batch_ind = env.get_n_step() - 1
 
       if batch_ind % env_config['display_step'] == 0:
@@ -73,7 +80,8 @@ def play(argv):
               "cost={:.9f}".format(c), "lr={:.9f}".format(env.print_lr()), \
               "grad=({:.5f},{:.5f})".format(grads_val_max, grads_val_min), \
               "r={:.5f} t={:d}".format(reward, terminal), state_str, \
-              "a={:d}".format(np.argmax(action))
+              "a={:d}".format(np.argmax(action)), \
+              "loss={:.5f}".format(loss)
 
       if batch_ind % env_config['n_batches'] == env_config['n_batches'] - 1:
         record_epoch_summary = env.session.run([merged_epoch_summary], feed_dict={loss_holder: avg_cost,
@@ -85,10 +93,10 @@ def play(argv):
               "avg_cost={:.9f}".format(avg_cost), "avg_lr={:.9f}".format(avg_lr), \
               "avg_grad=({:.5f},{:.5f})".format(avg_max_grad, avg_min_grad), \
               "action_rate=[{:.2f}, {:.2f}]".format(a0/env_config['n_batches'], a1/env_config['n_batches']), \
-              "avg_reward=[{:.5f}, {:.5f}]".format(avg_r0/a0, avg_r1/a1)
-        avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1 = 0, 0, 0, 0, 0, 0
+              "avg_reward=[{:.5f}, {:.5f}]".format(avg_r0/a0, avg_r1/a1), \
+              "avg_loss={:.5f}".format(avg_loss)
+        avg_r0, avg_r1, avg_loss, avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1 = 0, 0, 0, 0, 0, 0, 0, 0, 0
         epoch += 1
-        avg_r0, avg_r1 = 0, 0
         r_list0, r_list1 = [], []
 
       record_step_summary = env.session.run([merged_step_summary], feed_dict={lr_holder: env.print_lr()})[0]
