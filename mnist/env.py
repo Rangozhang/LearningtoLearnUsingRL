@@ -60,7 +60,6 @@ class SoftmaxRegression(object):
 
     self.optimizer = tf.train.AdamOptimizer( \
                     learning_rate=self.adaptive_lr_holder)
-
     self.grads = self.optimizer.compute_gradients(self.cost, var_list=self.trainable_var)
     self.apply_grads = self.optimizer.apply_gradients(self.grads)
 
@@ -74,7 +73,7 @@ class SoftmaxRegression(object):
     self.session = tf.Session(config=config_proto)
     self.session.run(tf.global_variables_initializer())
 
-    self.test_x,  self.test_y  = self.dataloader.test.images, self.dataloader.test.labels
+    self.test_x, self.test_y  = self.dataloader.validation.images, self.dataloader.validation.labels
 
   def reset(self):
     self.adaptive_lr = self.config['learning_rate']
@@ -87,6 +86,7 @@ class SoftmaxRegression(object):
     # define action
     action = np.argmax(action)
 
+    ############## 1. action ##############
     if action == 0: # decrease 3%
       self.adaptive_lr = self.config['learning_rate'] * 0.5
       # self.adaptive_lr *= 0.97
@@ -95,6 +95,7 @@ class SoftmaxRegression(object):
 
     train_x, train_y = self.dataloader.train.next_batch(self.config['batch_size'])
     # self.test_x, self.test_y = self.dataloader.train.next_batch(550*self.config['batch_size'])
+    # self.test_x, self.test_y = train_x, train_y
 
     test_c = self.session.run([self.cost], feed_dict={self.x:self.test_x, self.y:self.test_y})[0]
 
@@ -110,7 +111,7 @@ class SoftmaxRegression(object):
     self.costgrad_history.append(test_post_c-test_c)
     self.costgrad_history.popleft()
 
-    # ############## 1. state ##############
+    ############## 2. state ##############
     delta_c_batch = post_c_batch - c_batch
     delta_c_batch_stats = get_stats(delta_c_batch)
     delta_var = flatten_list(post_var) - flatten_list(var) # suppose to be amount to -lr*grads if no momentum
@@ -128,7 +129,7 @@ class SoftmaxRegression(object):
                             np.asarray(self.costgrad_history),
                             self.adaptive_lr])
 
-    ############## 2. terminal ##############
+    ############## 3. terminal ##############
     self.n_step += 1
     if self.n_step >= self.config['n_epochs'] * self.config['n_batches']:
       terminal = True
@@ -137,7 +138,7 @@ class SoftmaxRegression(object):
       terminal = False
 
 
-    ############## 3. reward ##############
+    ############## 4. reward ##############
     # -(np.log(post_c) - np.log(c))
     # log_diff = c - post_c if self.n_step != 0 else 0
     log_diff = (np.log(test_c) - np.log(test_post_c)) if self.n_step != 0 else 0
