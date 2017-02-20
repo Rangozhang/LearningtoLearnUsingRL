@@ -20,7 +20,7 @@ tf.app.flags.DEFINE_integer('explore', 4*30*550, 'observe before training') # 2 
 tf.app.flags.DEFINE_integer('observe', 1*30*550, 'observe before training') # 1 episode
 tf.app.flags.DEFINE_float('tau', 1e-3, 'rate to update target network towards primary network')
 tf.app.flags.DEFINE_integer('memory_size', 2000, 'replay memory size') # more than
-tf.app.flags.DEFINE_integer('memory_sample_freq', 50, 'How often to add a memory') # 11 tuples/epoch, 550 tuples/episode
+tf.app.flags.DEFINE_integer('memory_sample_freq', 1, 'How often to add a memory') # 11 tuples/epoch, 550 tuples/episode
 
 def linear(input_, output_size, stddev=0.02, bias_start=0.0, activation_fn=None, name='linear'):
   shape = input_.get_shape().as_list()
