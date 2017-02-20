@@ -16,8 +16,8 @@ tf.app.flags.DEFINE_float('start_e', 1.0, 'chance of random action at the beginn
 tf.app.flags.DEFINE_float('end_e', 0.1, 'chance of random action at the end')
 tf.app.flags.DEFINE_float('lr', 1e-3, 'learning rate')
 tf.app.flags.DEFINE_boolean('isTraining', True, 'is training?')
-tf.app.flags.DEFINE_integer('explore', 2*50*550, 'observe before training') # 2 episode
-tf.app.flags.DEFINE_integer('observe', 1*50*550, 'observe before training') # 1 episode
+tf.app.flags.DEFINE_integer('explore', 4*20*550, 'observe before training') # 2 episode
+tf.app.flags.DEFINE_integer('observe', 1*20*550, 'observe before training') # 1 episode
 tf.app.flags.DEFINE_float('tau', 1e-3, 'rate to update target network towards primary network')
 tf.app.flags.DEFINE_integer('memory_size', 2000, 'replay memory size') # more than
 tf.app.flags.DEFINE_integer('memory_sample_freq', 50, 'How often to add a memory') # 11 tuples/epoch, 550 tuples/episode

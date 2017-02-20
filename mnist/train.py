@@ -7,7 +7,7 @@ from env import SoftmaxRegression as SR
 def play(argv):
   env_config = {
   'n_training_samples' : 55000,
-  'learning_rate' : 8e-1,
+  'learning_rate' : 4e-3,
   'n_epochs' : 50,
   'n_batches' : 550, #env_config['n_training_samples']/env_config['batch_size']
   'batch_size' : 100,
@@ -37,14 +37,16 @@ def play(argv):
     writer = tf.summary.FileWriter("./res/train_fig/{:10d}/ep{:d}".format(datetime, ep))
 
     epoch, avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1, terminal = 0, 0, 0, 0, 0, 0, 0, False
+    avg_r0, avg_r1 = 0, 0
     while not terminal:
       action = agent.get_action()
-      if np.argmax(action) == 0:
-        a0 += 1.0 / env_config['n_batches']
-      elif np.argmax(action) == 1:
-        a1 += 1.0 / env_config['n_batches']
-
       c, grads, nxt_state, reward, terminal = env.step(action)
+      if np.argmax(action) == 0:
+        a0 += 1.0
+        avg_r0 += reward
+      elif np.argmax(action) == 1:
+        a1 += 1.0
+        avg_r1 += reward
 
       avg_lr += env.print_lr() / env_config['n_batches']
       avg_cost += c / env_config['n_batches']
@@ -60,7 +62,8 @@ def play(argv):
         print '  [%02d/%02d/%03d]'%(ep+1, epoch+1, batch_ind), \
               "cost={:.9f}".format(c), "lr={:.9f}".format(env.print_lr()), \
               "grad=({:.5f},{:.5f})".format(grads_val_max, grads_val_min), \
-              "r={:.5f} t={:d}".format(reward, terminal), state_str
+              "r={:.5f} t={:d}".format(reward, terminal), state_str, \
+              "a={:d}".format(np.argmax(action))
 
       if batch_ind % env_config['n_batches'] == env_config['n_batches'] - 1:
         record_epoch_summary = env.session.run([merged_epoch_summary], feed_dict={loss_holder: avg_cost,
@@ -69,9 +72,11 @@ def play(argv):
         print ' [%02d/%02d]'%(ep+1, epoch+1), \
               "avg_cost={:.9f}".format(avg_cost), "avg_lr={:.9f}".format(avg_lr), \
               "avg_grad=({:.5f},{:.5f})".format(avg_max_grad, avg_min_grad), \
-              "action_rate=[{:.5f}, {:.5f}, {:.5f}]".format(a0, a1, 1-a0-a1)
+              "action_rate=[{:.2f}, {:.2f}]".format(a0/env_config['n_batches'], a1/env_config['n_batches']), \
+              "avg_reward=[{:.5f}, {:.5f}]".format(avg_r0/a0, avg_r1/a1)
         avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1 = 0, 0, 0, 0, 0, 0
         epoch += 1
+        avg_r0, avg_r1 = 0, 0
 
       record_step_summary = env.session.run([merged_step_summary], feed_dict={lr_holder: env.print_lr()})[0]
       writer.add_summary(record_step_summary, batch_ind)

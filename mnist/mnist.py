@@ -48,19 +48,15 @@ class SoftmaxRegression(object):
 
     self.logits = tf.matmul(self.x, self.W) + self.b
     self.pred = tf.nn.softmax(self.logits)
-    # numerically better
+    # self.cost_batch = -tf.reduce_sum(self.y*tf.log(self.pred), reduction_indices=1)
+    # self.cost = tf.reduce_mean(self.cost_batch)
+    # handle cross entropy better numerically
     self.cost_batch = tf.nn.softmax_cross_entropy_with_logits(self.logits, self.y)
     self.cost = tf.reduce_mean(self.cost_batch)
 
-    # self.optimizer = tf.train.MomentumOptimizer( \
-    #         learning_rate=self.adaptive_lr_holder, momentum=0.9)
-
     # self.optimizer = tf.train.GradientDescentOptimizer( \
-    #         learning_rate=self.adaptive_lr_holder)
-
     self.optimizer = tf.train.AdamOptimizer( \
-                    learning_rate=self.adaptive_lr_holder)
-
+            learning_rate=self.adaptive_lr_holder)
     self.grads = self.optimizer.compute_gradients(self.cost, var_list=self.trainable_var)
     self.apply_grads = self.optimizer.apply_gradients(self.grads)
 
@@ -88,13 +84,11 @@ class SoftmaxRegression(object):
     action = np.argmax(action)
 
     if action == 0: # decrease 3%
-      self.adaptive_lr = self.config['learning_rate'] * 0.5
-      # self.adaptive_lr *= 0.97
+      self.adaptive_lr *= 0.97
     elif action == 1: # reset
-      self.adaptive_lr = self.config['learning_rate']
+      self.adaptive_lr = self.adaptive_lr
 
     train_x, train_y = self.dataloader.train.next_batch(self.config['batch_size'])
-    # self.test_x, self.test_y = self.dataloader.train.next_batch(550*self.config['batch_size'])
 
     test_c = self.session.run([self.cost], feed_dict={self.x:self.test_x, self.y:self.test_y})[0]
 
@@ -102,30 +96,30 @@ class SoftmaxRegression(object):
             [grad[0] for grad in self.grads], self.trainable_var, self.apply_grads], \
             feed_dict={self.x:train_x, self.y:train_y, self.adaptive_lr_holder:self.adaptive_lr})
 
-    post_c_batch, post_var = self.session.run([self.cost_batch, self.trainable_var], \
-                                               feed_dict={self.x:train_x, self.y:train_y})
+    # post_c_batch, post_var = self.session.run([self.cost_batch, self.trainable_var], \
+    #                                            feed_dict={self.x:train_x, self.y:train_y})
 
     test_post_c = self.session.run([self.cost], feed_dict={self.x:self.test_x, self.y:self.test_y})[0]
 
-    self.costgrad_history.append(test_post_c-test_c)
-    self.costgrad_history.popleft()
+    # self.costgrad_history.append(test_post_c-test_c)
+    # self.costgrad_history.popleft()
 
     # ############## 1. state ##############
-    delta_c_batch = post_c_batch - c_batch
-    delta_c_batch_stats = get_stats(delta_c_batch)
-    delta_var = flatten_list(post_var) - flatten_list(var) # suppose to be amount to -lr*grads if no momentum
-    delta_var_stats = get_stats(delta_var)
-    # grads_flatten = flatten_list(grads)
-    # grads_flatten_stats = get_stats(grads_flatten)
+    # delta_c_batch = post_c_batch - c_batch
+    # delta_c_batch_stats = get_stats(delta_c_batch)
+    # delta_var = flatten_list(post_var) - flatten_list(var) # suppose to be amount to -lr*grads if no momentum
+    # delta_var_stats = get_stats(delta_var)
+    # # grads_flatten = flatten_list(grads)
+    # # grads_flatten_stats = get_stats(grads_flatten)
 
     # (135,)
-    state_list = np.hstack([# delta_c_batch,
-                            delta_c_batch_stats,
-                            # delta_var,
-                            delta_var_stats,
-                            # grads_flatten,
-                            # grads_flatten_stats,
-                            np.asarray(self.costgrad_history),
+    state_list = np.hstack([# # delta_c_batch,
+                            # delta_c_batch_stats,
+                            # # delta_var,
+                            # delta_var_stats,
+                            # # grads_flatten,
+                            # # grads_flatten_stats,
+                            # np.asarray(self.costgrad_history),
                             self.adaptive_lr])
 
     ############## 2. terminal ##############
@@ -140,20 +134,17 @@ class SoftmaxRegression(object):
     ############## 3. reward ##############
     # -(np.log(post_c) - np.log(c))
     # log_diff = c - post_c if self.n_step != 0 else 0
-    log_diff = (np.log(test_c) - np.log(test_post_c)) if self.n_step != 0 else 0
+    log_diff = np.log(test_c) - np.log(test_post_c) if self.n_step != 0 else 0
     # self.reward_sum += log_diff
 
     # op.1
     # reward = self.reward_sum / self.n_step
 
     # op.2
-    reward = log_diff * 1e4
+    reward = log_diff
 
     # op.3: need to backprop by all actions?
     # reward = self.reward_sum / self.n_step if terminal else 0
-
-    # op.4: inverse of loss
-    # reward = 1 / test_post_c
 
     return c, grads, state_list, reward, terminal
 
@@ -179,18 +170,20 @@ if __name__ == "__main__":
 
   config = {
   'n_training_samples' : 55000,
-  'learning_rate' : 5e-1,
-  'n_epochs' : 80,
+  'learning_rate' : 4e-3,
+  'decay': 1,
+  'n_epochs' : 50,
   'n_batches' : 550, #config['n_training_samples']/config['batch_size']
   'batch_size' : 100,
-  'display_step' : 110,
-  'decay': 1
+  'display_step' : 110
   }
   print config
 
   lr = SoftmaxRegression(config);
   #writer = tf.train.SummaryWriter("./res/fig/{:10d}".format(int(time.time())))
-  writer = tf.summary.FileWriter("./res/env_fig/{:10d}".format(int(time.time())), lr.session.graph)
+  writer = tf.summary.FileWriter("./res/env_fig/{:.5f}_{:d}_{:10d}".format(config['learning_rate'], \
+                                                                    config['decay'], \
+                                                                    int(time.time())))
 
   #print "Init accuracy:", lr.test()
 
