@@ -66,6 +66,7 @@ class SoftmaxRegression(object):
     # self.var_grad = tf.gradients(self.cost, [self.W, self.b])
 
     self.dataloader = input_data.read_data_sets("/home/users/yu01.zhang/dataset/MNIST_data", one_hot=True)
+    self.eval_dataloader= input_data.read_data_sets("/home/users/yu01.zhang/dataset/MNIST_data", one_hot=True)
     config_proto = tf.ConfigProto(log_device_placement=False)
     config_proto.gpu_options.per_process_gpu_memory_fraction = 0.2
     # config_proto.gpu_options.allow_growth = True
@@ -73,7 +74,8 @@ class SoftmaxRegression(object):
     self.session = tf.Session(config=config_proto)
     self.session.run(tf.global_variables_initializer())
 
-    self.test_x, self.test_y  = self.dataloader.validation.images, self.dataloader.validation.labels
+    # self.test_x, self.test_y  = self.dataloader.validation.images, self.dataloader.validation.labels
+    # self.test_x, self.test_y  = self.dataloader.train.images, self.dataloader.train.labels
 
   def reset(self):
     self.adaptive_lr = self.config['learning_rate']
@@ -88,30 +90,50 @@ class SoftmaxRegression(object):
 
     ############## 1. action ##############
     if action == 0: # decrease 3%
-      self.adaptive_lr = self.config['learning_rate'] * 0.5
-      # self.adaptive_lr *= 0.97
+      # self.adaptive_lr = self.config['learning_rate'] * 0.1
+      self.adaptive_lr *= 0.99
     elif action == 1: # reset
+      # self.adaptive_lr = self.adaptive_lr
       self.adaptive_lr = self.config['learning_rate']
 
-    train_x, train_y = self.dataloader.train.next_batch(self.config['batch_size'])
-    # self.test_x, self.test_y = self.dataloader.train.next_batch(550*self.config['batch_size'])
-    # self.test_x, self.test_y = train_x, train_y
+    self.test_x, self.test_y = self.eval_dataloader.train.next_batch(self.config['batch_size']*10)
+    test_c, c_batch, var = self.session.run([self.cost, self.cost_batch, self.trainable_var], \
+                                            feed_dict={self.x:self.test_x, self.y:self.test_y})
 
-    test_c = self.session.run([self.cost], feed_dict={self.x:self.test_x, self.y:self.test_y})[0]
+    sum_c = 0
+    for iter in xrange(self.config['action_freq']):
+      train_x, train_y = self.dataloader.train.next_batch(self.config['batch_size'])
 
-    c, c_batch, grads, var, _ = self.session.run([self.cost, self.cost_batch, \
-            [grad[0] for grad in self.grads], self.trainable_var, self.apply_grads], \
-            feed_dict={self.x:train_x, self.y:train_y, self.adaptive_lr_holder:self.adaptive_lr})
+      c, grads, _ = self.session.run([self.cost, \
+              [grad[0] for grad in self.grads], self.apply_grads], \
+              feed_dict={self.x:train_x, self.y:train_y, self.adaptive_lr_holder:self.adaptive_lr})
+      sum_c += c
 
-    post_c_batch, post_var = self.session.run([self.cost_batch, self.trainable_var], \
-                                               feed_dict={self.x:train_x, self.y:train_y})
-
-    test_post_c = self.session.run([self.cost], feed_dict={self.x:self.test_x, self.y:self.test_y})[0]
+    test_post_c, post_c_batch, post_var = self.session.run([self.cost, self.cost_batch, self.trainable_var], \
+                                                           feed_dict={self.x:self.test_x, self.y:self.test_y})
 
     self.costgrad_history.append(test_post_c-test_c)
     self.costgrad_history.popleft()
 
-    ############## 2. state ##############
+    ############## 2. reward ##############
+    # -(np.log(post_c) - np.log(c))
+    # log_diff = c - post_c if self.n_step != 0 else 0
+    log_diff = (np.log(test_c) - np.log(test_post_c)) if self.n_step != 0 else 0
+    # self.reward_sum += log_diff
+
+    # opt.1
+    # reward = self.reward_sum
+
+    # opt.2
+    # reward = log_diff * 1e2
+
+    # opt.3: inverse of loss
+    reward = 1 / test_post_c ** 1
+
+    # opt.4
+    # reward = -np.log(test_post_c)
+
+    ############## 3. state ##############
     delta_c_batch = post_c_batch - c_batch
     delta_c_batch_stats = get_stats(delta_c_batch)
     delta_var = flatten_list(post_var) - flatten_list(var) # suppose to be amount to -lr*grads if no momentum
@@ -119,44 +141,25 @@ class SoftmaxRegression(object):
     # grads_flatten = flatten_list(grads)
     # grads_flatten_stats = get_stats(grads_flatten)
 
-    # (135,)
     state_list = np.hstack([# delta_c_batch,
-                            delta_c_batch_stats,
-                            # delta_var,
-                            delta_var_stats,
-                            # grads_flatten,
-                            # grads_flatten_stats,
-                            np.asarray(self.costgrad_history),
-                            self.adaptive_lr])
+                              delta_c_batch_stats,
+                              # delta_var,
+                              delta_var_stats,
+                              # grads_flatten,
+                              # grads_flatten_stats,
+                              np.asarray(self.costgrad_history),
+                              self.adaptive_lr,
+                              self.n_step])
 
-    ############## 3. terminal ##############
+    ############## 4. terminal ##############
     self.n_step += 1
-    if self.n_step >= self.config['n_epochs'] * self.config['n_batches']:
+    if self.n_step >= self.config['n_epochs'] * self.config['n_batches'] / self.config['action_freq']:
       terminal = True
       self.n_step = 0
     else:
       terminal = False
 
-
-    ############## 4. reward ##############
-    # -(np.log(post_c) - np.log(c))
-    # log_diff = c - post_c if self.n_step != 0 else 0
-    log_diff = (np.log(test_c) - np.log(test_post_c)) if self.n_step != 0 else 0
-    # self.reward_sum += log_diff
-
-    # op.1
-    # reward = self.reward_sum / self.n_step
-
-    # op.2
-    reward = log_diff * 1e4
-
-    # op.3: need to backprop by all actions?
-    # reward = self.reward_sum / self.n_step if terminal else 0
-
-    # op.4: inverse of loss
-    # reward = 1 / test_post_c
-
-    return c, grads, state_list, reward, terminal
+    return sum_c, grads, state_list, reward, terminal
 
   def print_lr(self):
     return self.adaptive_lr
@@ -171,7 +174,7 @@ class SoftmaxRegression(object):
   def get_n_step(self):
     return self.n_step
 
-
+"""
 if __name__ == "__main__":
 
   cost_holder = tf.placeholder(tf.float32)
@@ -247,4 +250,4 @@ if __name__ == "__main__":
   # axes = plt.gca()
   # axes.set_ylim([0.2,0.4])
   # plt.show()
-
+"""

@@ -2,7 +2,5 @@ LogisticRegression/dataset/train
 LogisticRegression/dataset/train/*
 LogisticRegression/dataset/test
 LogisticRegression/dataset/test/*
-mnist/res/env_fig
-mnist/res/env_fig/*
-mnist/res/train_fig
-mnist/res/train_fig/*
+mnist/res
+mnist/res/*
