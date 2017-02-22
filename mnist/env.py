@@ -93,6 +93,7 @@ class SoftmaxRegression(object):
       # self.adaptive_lr = self.config['learning_rate'] * 0.1
       self.adaptive_lr *= 0.99
     elif action == 1: # reset
+      # self.adaptive_lr = self.adaptive_lr
       self.adaptive_lr = self.config['learning_rate']
 
     self.test_x, self.test_y = self.eval_dataloader.train.next_batch(self.config['batch_size']*10)
@@ -114,7 +115,25 @@ class SoftmaxRegression(object):
     self.costgrad_history.append(test_post_c-test_c)
     self.costgrad_history.popleft()
 
-    ############## 2. state ##############
+    ############## 2. reward ##############
+    # -(np.log(post_c) - np.log(c))
+    # log_diff = c - post_c if self.n_step != 0 else 0
+    log_diff = (np.log(test_c) - np.log(test_post_c)) if self.n_step != 0 else 0
+    # self.reward_sum += log_diff
+
+    # opt.1
+    # reward = self.reward_sum
+
+    # opt.2
+    # reward = log_diff * 1e2
+
+    # opt.3: inverse of loss
+    reward = 1 / test_post_c ** 1
+
+    # opt.4
+    # reward = -np.log(test_post_c)
+
+    ############## 3. state ##############
     delta_c_batch = post_c_batch - c_batch
     delta_c_batch_stats = get_stats(delta_c_batch)
     delta_var = flatten_list(post_var) - flatten_list(var) # suppose to be amount to -lr*grads if no momentum
@@ -129,34 +148,16 @@ class SoftmaxRegression(object):
                               # grads_flatten,
                               # grads_flatten_stats,
                               np.asarray(self.costgrad_history),
-                              self.adaptive_lr])
+                              self.adaptive_lr,
+                              self.n_step])
 
-    ############## 3. terminal ##############
+    ############## 4. terminal ##############
     self.n_step += 1
     if self.n_step >= self.config['n_epochs'] * self.config['n_batches'] / self.config['action_freq']:
       terminal = True
       self.n_step = 0
     else:
       terminal = False
-
-
-    ############## 4. reward ##############
-    # -(np.log(post_c) - np.log(c))
-    # log_diff = c - post_c if self.n_step != 0 else 0
-    log_diff = (np.log(test_c) - np.log(test_post_c)) if self.n_step != 0 else 0
-    # self.reward_sum += log_diff
-
-    # op.1
-    # reward = self.reward_sum
-
-    # op.2
-    # reward = log_diff * 1e2
-
-    # op.3: need to backprop by all actions?
-    # reward = self.reward_sum / self.n_step if terminal else 0
-
-    # op.4: inverse of loss
-    reward = 2 / test_post_c
 
     return sum_c, grads, state_list, reward, terminal
 

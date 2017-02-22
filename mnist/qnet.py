@@ -4,23 +4,23 @@ import random
 from collections import deque
 
 # len_epoch: 550/action_freq(110) = 5
-# len_episode: 30 epoch
+# len_episode: 50 epoch
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('num_actions', 2, 'number of actions')
-tf.app.flags.DEFINE_integer('num_episodes', 25, 'number of episodes')
+tf.app.flags.DEFINE_integer('num_episodes', 30, 'number of episodes')
 tf.app.flags.DEFINE_integer('batch_size', 32, '')
-tf.app.flags.DEFINE_integer('observ_dim', 35, 'dimension of state')
+tf.app.flags.DEFINE_integer('observ_dim', 36, 'dimension of state')
 tf.app.flags.DEFINE_integer('state_num', 4, 'number of observ are stacked in a state')
 tf.app.flags.DEFINE_float('gamma', 0.99, 'discount factor on past Q values')
 tf.app.flags.DEFINE_float('start_e', 1.0, 'chance of random action at the beginning')
-tf.app.flags.DEFINE_float('end_e', 0.1, 'chance of random action at the end')
+tf.app.flags.DEFINE_float('end_e', 0, 'chance of random action at the end')
 tf.app.flags.DEFINE_float('lr', 1e-3, 'learning rate')
 tf.app.flags.DEFINE_boolean('isTraining', True, 'is training?')
-tf.app.flags.DEFINE_integer('explore', 4*30*5, 'observe before training') # 4 episode
-tf.app.flags.DEFINE_integer('observe', 1*30*5, 'observe before training') # 1 episode
+tf.app.flags.DEFINE_integer('explore', 24*50*5, 'observe before training') # 4 episode
+tf.app.flags.DEFINE_integer('observe', 1*50*5, 'observe before training') # 1 episode
 tf.app.flags.DEFINE_float('tau', 1e-3, 'rate to update target network towards primary network')
-tf.app.flags.DEFINE_integer('memory_size', 1200, 'replay memory size')
+tf.app.flags.DEFINE_integer('memory_size', 500, 'replay memory size')
 tf.app.flags.DEFINE_integer('memory_sample_freq', 1, 'How often to add a memory')
 
 def linear(input_, output_size, stddev=0.02, bias_start=0.0, activation_fn=None, name='linear'):

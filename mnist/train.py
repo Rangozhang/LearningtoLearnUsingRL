@@ -20,11 +20,12 @@ def play(argv):
   agent = qnet.qnet()
 
   datetime = int(time.time())
+  print datetime
 
   loss_holder = tf.placeholder(tf.float32)
   cost_holder = tf.placeholder(tf.float32)
-  # lr_holder = tf.placeholder(tf.float32)
   avg_lr_holder = tf.placeholder(tf.float32)
+  # lr_holder = tf.placeholder(tf.float32)
   # r_holder0 = tf.placeholder(tf.float32, [None])
   # r_holder1 = tf.placeholder(tf.float32, [None])
 
@@ -46,7 +47,7 @@ def play(argv):
     agent.init_state(state)
     env.reset()
 
-    writer = tf.summary.FileWriter("./res/train_fig/envlr{:.5f}_{:10d}/ep{:d}".format(env_config['learning_rate'], datetime, ep))
+    writer = tf.summary.FileWriter("./res/train_fig/envlr{:.5f}_{:10d}/ep{:d}".format(env_config['learning_rate'], datetime, ep+1))
 
     avg_r0, avg_r1, epoch, avg_loss, avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1, terminal \
                                                                             = 0, 0, 0, 0, 0, 0, 0, 0, 1e-10, 1e-10, False
