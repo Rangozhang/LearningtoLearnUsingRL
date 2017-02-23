@@ -8,19 +8,19 @@ from collections import deque
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('num_actions', 2, 'number of actions')
-tf.app.flags.DEFINE_integer('num_episodes', 30, 'number of episodes')
+tf.app.flags.DEFINE_integer('num_episodes', 2000, 'number of episodes')
 tf.app.flags.DEFINE_integer('batch_size', 32, '')
 tf.app.flags.DEFINE_integer('observ_dim', 36, 'dimension of state')
 tf.app.flags.DEFINE_integer('state_num', 4, 'number of observ are stacked in a state')
 tf.app.flags.DEFINE_float('gamma', 0.99, 'discount factor on past Q values')
 tf.app.flags.DEFINE_float('start_e', 1.0, 'chance of random action at the beginning')
-tf.app.flags.DEFINE_float('end_e', 0, 'chance of random action at the end')
+tf.app.flags.DEFINE_float('end_e', 0.1, 'chance of random action at the end')
 tf.app.flags.DEFINE_float('lr', 1e-3, 'learning rate')
 tf.app.flags.DEFINE_boolean('isTraining', True, 'is training?')
-tf.app.flags.DEFINE_integer('explore', 24*50*5, 'observe before training') # 4 episode
+tf.app.flags.DEFINE_integer('explore', 99*50*5, 'observe before training') # 4 episode
 tf.app.flags.DEFINE_integer('observe', 1*50*5, 'observe before training') # 1 episode
 tf.app.flags.DEFINE_float('tau', 1e-3, 'rate to update target network towards primary network')
-tf.app.flags.DEFINE_integer('memory_size', 500, 'replay memory size')
+tf.app.flags.DEFINE_integer('memory_size', 2500, 'replay memory size')
 tf.app.flags.DEFINE_integer('memory_sample_freq', 1, 'How often to add a memory')
 
 def linear(input_, output_size, stddev=0.02, bias_start=0.0, activation_fn=None, name='linear'):
@@ -144,8 +144,10 @@ class qnet(object):
 
     ### 2. train
     if self.step > FLAGS.observe and FLAGS.isTraining:
-      cost = self.train()
+      cost, q_pred, q_pred_t = self.train()
     else:
+      q_pred = np.zeros((self.batch_size, FLAGS.num_actions))
+      q_pred_t = np.zeros((self.batch_size, FLAGS.num_actions))
       cost = 0
 
     ### 3. print info.
@@ -162,7 +164,7 @@ class qnet(object):
     ### 4. update training states
     self.cur_state = next_state
     self.step += 1
-    return state_str, cost
+    return state_str, cost, q_pred, q_pred_t
 
   def train(self):
     ### 1. obtain training batch from memory
@@ -180,12 +182,12 @@ class qnet(object):
     terminal_multiplier = -(terminal-1)
     double_q = q_pred_t[range(FLAGS.batch_size), action_pred]
     Q_gt = reward_batch + FLAGS.gamma * double_q * terminal_multiplier
-    c, _ = self.session.run([self.cost, self.trainer], feed_dict={
+    c, q_pred, _ = self.session.run([self.cost, self.Q, self.trainer], feed_dict={
                         self.state_input: state_batch,
                         self.Q_gt: Q_gt,
                         self.action: action_batch})
     self.update_target_network()
-    return c
+    return c, q_pred, q_pred_t
 
   def get_action(self):
     action_pred = self.session.run([self.action_pred], \
@@ -197,6 +199,10 @@ class qnet(object):
 
     if self.epsilon > FLAGS.end_e and self.step > FLAGS.observe:
         self.epsilon -= (FLAGS.start_e - FLAGS.end_e)/FLAGS.explore
+
+    if self.epsilon <= 0.6:
+        self.epsilon = 0
+
     return action
 
   #def proc_state(self, state):

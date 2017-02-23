@@ -68,7 +68,7 @@ class SoftmaxRegression(object):
     self.dataloader = input_data.read_data_sets("/home/users/yu01.zhang/dataset/MNIST_data", one_hot=True)
     self.eval_dataloader= input_data.read_data_sets("/home/users/yu01.zhang/dataset/MNIST_data", one_hot=True)
     config_proto = tf.ConfigProto(log_device_placement=False)
-    config_proto.gpu_options.per_process_gpu_memory_fraction = 0.2
+    config_proto.gpu_options.per_process_gpu_memory_fraction = 0.4
     # config_proto.gpu_options.allow_growth = True
     # config_proto.gpu_options.visible_device_list = '3'
     self.session = tf.Session(config=config_proto)
@@ -91,10 +91,10 @@ class SoftmaxRegression(object):
     ############## 1. action ##############
     if action == 0: # decrease 3%
       # self.adaptive_lr = self.config['learning_rate'] * 0.1
-      self.adaptive_lr *= 0.99
+      self.adaptive_lr *= 0.97
     elif action == 1: # reset
-      # self.adaptive_lr = self.adaptive_lr
-      self.adaptive_lr = self.config['learning_rate']
+      self.adaptive_lr = self.adaptive_lr
+      # self.adaptive_lr = self.config['learning_rate']
 
     self.test_x, self.test_y = self.eval_dataloader.train.next_batch(self.config['batch_size']*10)
     test_c, c_batch, var = self.session.run([self.cost, self.cost_batch, self.trainable_var], \
@@ -118,7 +118,7 @@ class SoftmaxRegression(object):
     ############## 2. reward ##############
     # -(np.log(post_c) - np.log(c))
     # log_diff = c - post_c if self.n_step != 0 else 0
-    log_diff = (np.log(test_c) - np.log(test_post_c)) if self.n_step != 0 else 0
+    # log_diff = (np.log(test_c) - np.log(test_post_c)) if self.n_step != 0 else 0
     # self.reward_sum += log_diff
 
     # opt.1
@@ -158,6 +158,8 @@ class SoftmaxRegression(object):
       self.n_step = 0
     else:
       terminal = False
+      # only give reward at the end
+      # reward = 0
 
     return sum_c, grads, state_list, reward, terminal
 

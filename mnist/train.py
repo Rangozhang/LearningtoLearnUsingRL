@@ -25,6 +25,8 @@ def play(argv):
   loss_holder = tf.placeholder(tf.float32)
   cost_holder = tf.placeholder(tf.float32)
   avg_lr_holder = tf.placeholder(tf.float32)
+  q_holder = tf.placeholder(tf.float32, [None, 2])
+  q_t_holder = tf.placeholder(tf.float32, [None, 2])
   # lr_holder = tf.placeholder(tf.float32)
   # r_holder0 = tf.placeholder(tf.float32, [None])
   # r_holder1 = tf.placeholder(tf.float32, [None])
@@ -32,12 +34,17 @@ def play(argv):
   cost_summary = tf.summary.scalar('cost', cost_holder)
   loss_summary = tf.summary.scalar('loss', loss_holder)
   avg_lr_summary = tf.summary.scalar('avg_lr', avg_lr_holder)
+  q_summary = tf.summary.histogram('q', q_holder)
+  q_t_summary = tf.summary.histogram('q', q_t_holder)
   # lr_summary = tf.summary.scalar('lr', lr_holder)
   # r_summary0 = tf.summary.histogram('reward_distribution0', r_holder0)
   # r_summary1 = tf.summary.histogram('reward_distribution1', r_holder1)
 
-  merged_epoch_summary = tf.summary.merge([cost_summary, avg_lr_summary, loss_summary]) # , r_summary0, r_summary1
+  merged_epoch_summary = tf.summary.merge([cost_summary, avg_lr_summary]) # , r_summary0, r_summary1
+  merged_summary = tf.summary.merge([loss_summary, q_summary, q_t_summary])
   # merged_step_summary = tf.summary.merge([lr_summary])
+
+  writer = tf.summary.FileWriter("./res/train_fig/envlr{:.5f}_{:10d}/".format(env_config['learning_rate'], datetime))
 
   for ep in xrange(qnet.FLAGS.num_episodes):
     print "[{}]".format(ep+1)
@@ -47,7 +54,7 @@ def play(argv):
     agent.init_state(state)
     env.reset()
 
-    writer = tf.summary.FileWriter("./res/train_fig/envlr{:.5f}_{:10d}/ep{:d}".format(env_config['learning_rate'], datetime, ep+1))
+    ep_writer = tf.summary.FileWriter("./res/train_fig/envlr{:.5f}_{:10d}/ep{:d}".format(env_config['learning_rate'], datetime, ep+1))
 
     avg_r0, avg_r1, epoch, avg_loss, avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1, terminal \
                                                                             = 0, 0, 0, 0, 0, 0, 0, 0, 1e-10, 1e-10, False
@@ -60,7 +67,7 @@ def play(argv):
       c, grads, nxt_state, reward, terminal = env.step(action)
 
       # step 3
-      state_str, loss = agent.set_perception(action, reward, nxt_state, terminal)
+      state_str, loss, q_pred, q_pred_t = agent.set_perception(action, reward, nxt_state, terminal)
 
       if np.argmax(action) == 0:
         a0 += 1.0
@@ -93,13 +100,16 @@ def play(argv):
 
       if batch_ind % (env_config['n_batches']/env_config['action_freq']) == \
               (env_config['n_batches']/env_config['action_freq']) - 1:
-        record_epoch_summary = env.session.run([merged_epoch_summary], feed_dict={loss_holder: avg_loss,
-                                                                                  cost_holder: avg_cost,
-                                                                                  avg_lr_holder: avg_lr})[0]
-                                                                                  # r_holder0: r_list0,
-                                                                                  # r_holder1: r_list1
+        record_epoch_summary, record_summary = env.session.run([merged_epoch_summary, merged_summary], feed_dict={loss_holder: avg_loss,
+                                                                                                       cost_holder: avg_cost,
+                                                                                                       avg_lr_holder: avg_lr,
+                                                                                                       q_holder: q_pred,
+                                                                                                       q_t_holder: q_pred_t})
+                                                                                                       # r_holder0: r_list0,
+                                                                                                       # r_holder1: r_list1
 
-        writer.add_summary(record_epoch_summary, epoch)
+        ep_writer.add_summary(record_epoch_summary, epoch)
+        writer.add_summary(record_summary, ep*(env_config['n_epochs'])+epoch)
         print ' [%02d/%02d]'%(ep+1, epoch+1), \
               "cost={:.9f}".format(avg_cost), "lr={:.9f}".format(avg_lr), \
               state_str, \
@@ -113,7 +123,7 @@ def play(argv):
         # r_list0, r_list1 = [], []
 
       # record_step_summary = env.session.run([merged_step_summary], feed_dict={lr_holder: env.print_lr()})[0]
-      # writer.add_summary(record_step_summary, batch_ind)
+      # ep_writer.add_summary(record_step_summary, batch_ind)
 
 if __name__ == "__main__":
   tf.app.run(play)
