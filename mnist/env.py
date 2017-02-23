@@ -128,7 +128,7 @@ class SoftmaxRegression(object):
     # reward = log_diff * 1e2
 
     # opt.3: inverse of loss
-    reward = 1 / test_post_c ** 1
+    reward = 1 / test_post_c ** 1 # 0.5
 
     # opt.4
     # reward = -np.log(test_post_c)
@@ -156,10 +156,12 @@ class SoftmaxRegression(object):
     if self.n_step >= self.config['n_epochs'] * self.config['n_batches'] / self.config['action_freq']:
       terminal = True
       self.n_step = 0
+      # test_c = self.session.run([self.cost], feed_dict={self.x:self.dataloader.train.images, self.y:self.dataloader.train.labels})[0]
+      # reward = 1 / test_c
     else:
       terminal = False
       # only give reward at the end
-      # reward = 0
+      reward = 0
 
     return sum_c, grads, state_list, reward, terminal
 
