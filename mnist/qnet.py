@@ -8,7 +8,7 @@ from collections import deque
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('num_actions', 2, 'number of actions')
-tf.app.flags.DEFINE_integer('num_episodes', 2000, 'number of episodes')
+tf.app.flags.DEFINE_integer('num_episodes', 500, 'number of episodes')
 tf.app.flags.DEFINE_integer('batch_size', 32, '')
 tf.app.flags.DEFINE_integer('observ_dim', 36, 'dimension of state')
 tf.app.flags.DEFINE_integer('state_num', 4, 'number of observ are stacked in a state')
@@ -17,10 +17,10 @@ tf.app.flags.DEFINE_float('start_e', 1.0, 'chance of random action at the beginn
 tf.app.flags.DEFINE_float('end_e', 0.1, 'chance of random action at the end')
 tf.app.flags.DEFINE_float('lr', 1e-3, 'learning rate')
 tf.app.flags.DEFINE_boolean('isTraining', True, 'is training?')
-tf.app.flags.DEFINE_integer('explore', 99*50*5, 'observe before training') # 4 episode
-tf.app.flags.DEFINE_integer('observe', 1*50*5, 'observe before training') # 1 episode
+tf.app.flags.DEFINE_integer('explore', 300*50*5, 'observe before training') # 4 episode
+tf.app.flags.DEFINE_integer('observe', 5*50*5, 'observe before training') # 1 episode
 tf.app.flags.DEFINE_float('tau', 1e-3, 'rate to update target network towards primary network')
-tf.app.flags.DEFINE_integer('memory_size', 2500, 'replay memory size')
+tf.app.flags.DEFINE_integer('memory_size', 2000, 'replay memory size')
 tf.app.flags.DEFINE_integer('memory_sample_freq', 1, 'How often to add a memory')
 
 def linear(input_, output_size, stddev=0.02, bias_start=0.0, activation_fn=None, name='linear'):
@@ -112,7 +112,9 @@ class qnet(object):
     #self.action_onehot = tf.one_hot(self.action, FLAGS.num_actions, dtype=tf.float32)
     self.action = tf.placeholder('float32', [None, FLAGS.num_actions])
     self.Q_pred = tf.reduce_sum(self.action*self.Q, reduction_indices=1)
-    self.cost = tf.reduce_mean(tf.square(self.Q_gt-self.Q_pred))
+    self.delta_Q = self.Q_gt-self.Q_pred
+    self.cost = tf.reduce_mean(tf.square(self.delta_Q))
+    self.cost_norm = tf.reduce_mean(tf.abs(self.delta_Q/self.Q_pred))
     self.trainer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr).minimize(self.cost)
 
   def init_state(self, observation):
@@ -164,6 +166,7 @@ class qnet(object):
     ### 4. update training states
     self.cur_state = next_state
     self.step += 1
+    # return cost is for reference, so use ((q-q_t)/q)**2
     return state_str, cost, q_pred, q_pred_t
 
   def train(self):
@@ -182,26 +185,23 @@ class qnet(object):
     terminal_multiplier = -(terminal-1)
     double_q = q_pred_t[range(FLAGS.batch_size), action_pred]
     Q_gt = reward_batch + FLAGS.gamma * double_q * terminal_multiplier
-    c, q_pred, _ = self.session.run([self.cost, self.Q, self.trainer], feed_dict={
+    c, q_pred, _ = self.session.run([self.cost_norm, self.Q, self.trainer], feed_dict={
                         self.state_input: state_batch,
                         self.Q_gt: Q_gt,
                         self.action: action_batch})
     self.update_target_network()
     return c, q_pred, q_pred_t
 
-  def get_action(self):
+  def get_action(self, greedy=False):
     action_pred = self.session.run([self.action_pred], \
             feed_dict={self.state_input: self.cur_state[np.newaxis, :]})[0]
     action = np.zeros(FLAGS.num_actions)
-    action_ind = action_pred if random.random() > self.epsilon \
+    action_ind = action_pred if random.random() > (self.epsilon if not greedy else 0) \
                              else random.randrange(FLAGS.num_actions)
     action[action_ind] = 1
 
     if self.epsilon > FLAGS.end_e and self.step > FLAGS.observe:
         self.epsilon -= (FLAGS.start_e - FLAGS.end_e)/FLAGS.explore
-
-    if self.epsilon <= 0.6:
-        self.epsilon = 0
 
     return action
 

@@ -13,6 +13,7 @@ def play(argv):
   'batch_size' : 100,
   'display_step' : np.Inf,
   'action_freq' : 110,
+  'validation_freq': 50,
   }
   print env_config
 
@@ -58,10 +59,12 @@ def play(argv):
 
     avg_r0, avg_r1, epoch, avg_loss, avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1, terminal \
                                                                             = 0, 0, 0, 0, 0, 0, 0, 0, 1e-10, 1e-10, False
+    isValidationEp = (ep % env_config['validation_freq'] == 0 and ep != 0)
     # r_list0, r_list1 = [], []
     while not terminal:
       # step 1
-      action = agent.get_action()
+      # set epsilon to 0 every 50 ep
+      action = agent.get_action(isValidationEp)
 
       # step 2
       c, grads, nxt_state, reward, terminal = env.step(action)
@@ -112,11 +115,12 @@ def play(argv):
         writer.add_summary(record_summary, ep*(env_config['n_epochs'])+epoch)
         print ' [%02d/%02d]'%(ep+1, epoch+1), \
               "cost={:.9f}".format(avg_cost), "lr={:.9f}".format(avg_lr), \
-              state_str, \
+              state_str if not isValidationEp else "validation", \
               "a/=[{:.2f}, {:.2f}]".format(a0/(env_config['n_batches']/env_config['action_freq']), \
                                                     a1/(env_config['n_batches']/env_config['action_freq'])), \
-              "r/=[{:.5f}, {:.5f}]".format(avg_r0/a0, avg_r1/a1), \
+              "last_r={:.5f}".format(reward), \
               "loss={:.5f}".format(avg_loss)
+              # "r/=[{:.5f}, {:.5f}]".format(avg_r0/a0, avg_r1/a1), \
               # "avg_grad=({:.5f},{:.5f})".format(avg_max_grad, avg_min_grad), \
         avg_r0, avg_r1, avg_loss, avg_lr, avg_cost, avg_max_grad, avg_min_grad, a0, a1 = 0, 0, 0, 0, 0, 0, 0, 1e-10, 1e-10
         epoch += 1
